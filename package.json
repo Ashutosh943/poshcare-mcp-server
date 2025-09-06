@@ -2,6 +2,7 @@
   "name": "kleenito-mcp-server",
   "version": "1.0.0",
   "description": "MCP server for Kleenito sales data",
+  "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",

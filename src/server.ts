@@ -1,18 +1,8 @@
 /*
-Simple Streamable HTTP MCP server (TypeScript)
-- Exposes a single tool: "how-was-day"
-  - Usage: call tool with optional { location?: string }
-  - Response (no auth): "It was awesome"
-
-Run instructions:
-1. npm init -y
-2. npm install express @modelcontextprotocol/sdk zod
-3. npm install --save-dev typescript ts-node @types/node @types/express
-4. npx tsc --init  (ensure target is ES2020+ and moduleResolution node)
-5. npx ts-node mcp-poshcare-server.ts
-
-This example keeps session-state via Streamable HTTP transports. It's intentionally
-minimal and does NOT implement authentication.
+Enhanced Streamable HTTP MCP server for PoshCare (TypeScript)
+- Multiple tools with better descriptions to ensure usage
+- Resources for context
+- Improved discoverability
 */
 
 import express from "express";
@@ -26,46 +16,139 @@ import { z } from "zod";
 const app = express();
 app.use(express.json());
 
-// Allow browser clients to read the Mcp-Session-Id header if needed
 app.use(cors({
   origin: true,
   exposedHeaders: ["Mcp-Session-Id"],
   allowedHeaders: ["Content-Type", "mcp-session-id"],
 }));
 
-// Store transports by session id
 const transports: Record<string, StreamableHTTPServerTransport> = {};
 
 function createMcpServer() {
   const server = new McpServer({
-    name: "poshcare-day-server",
+    name: "poshcare-server",
     version: "1.0.0",
   });
 
-  // Register the simple "how-was-day" tool
+  // Main tool - improved description and keywords
   server.registerTool(
     "how-was-day",
     {
-      title: "How was the day at PoshCare",
-      description: "Return a short summary of how the day was at PoshCare",
-      // optional input (for example, location or date). Not required.
+      title: "Get PoshCare Daily Summary",
+      description: "Retrieves information about daily activities, operations, or status at PoshCare. Use this when asked about PoshCare's day, daily operations, how things went, or general status updates. Responds to queries about PoshCare activities, performance, or daily summaries.",
       inputSchema: {
-        location: z.string().optional(),
-        date: z.string().optional(),
+        location: z.string().optional().describe("Specific location or department within PoshCare"),
+        date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to today if not specified)")
       },
     },
     async (args: { location?: string; date?: string }) => {
-      // No authentication — always returns the same friendly reply
       const locationPart = args.location ? ` at ${args.location}` : "";
-      const datePart = args.date ? ` on ${args.date}` : "";
+      const datePart = args.date ? ` on ${args.date}` : " today";
 
       return {
         content: [
           {
-            type: "text",
-            text: `It was awesome${locationPart}${datePart}`,
+            type: "text" as const,
+            text: `The day was awesome${locationPart}${datePart}! All systems running smoothly and team performance was excellent.`,
           },
         ],
+      };
+    }
+  );
+
+  // Additional tool for general PoshCare information
+  server.registerTool(
+    "get-poshcare-info",
+    {
+      title: "Get PoshCare Information",
+      description: "Retrieves general information about PoshCare services, departments, locations, or company details. Use when asked about what PoshCare does, services offered, company information, or general inquiries about PoshCare.",
+      inputSchema: {
+        topic: z.string().describe("What aspect of PoshCare to get information about (services, locations, team, etc.)")
+      },
+    },
+    async (args: { topic: string }) => {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `PoshCare ${args.topic}: We provide excellent healthcare services with a focus on quality care and patient satisfaction. Our team is dedicated to delivering the best possible outcomes.`,
+          },
+        ],
+      };
+    }
+  );
+
+  // System status tool
+  server.registerTool(
+    "check-poshcare-status",
+    {
+      title: "Check PoshCare System Status",
+      description: "Checks the operational status of PoshCare systems, services, or departments. Use when asked about system status, operational status, whether services are running, or if there are any issues.",
+      inputSchema: {
+        system: z.string().optional().describe("Specific system or service to check (optional, checks all if not specified)")
+      },
+    },
+    async (args: { system?: string }) => {
+      const systemPart = args.system ? ` for ${args.system}` : "";
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `All PoshCare systems${systemPart} are operational and running smoothly. No issues detected.`,
+          },
+        ],
+      };
+    }
+  );
+
+  // Team updates tool
+  server.registerTool(
+    "get-team-updates",
+    {
+      title: "Get PoshCare Team Updates",
+      description: "Retrieves updates about PoshCare team activities, achievements, or news. Use when asked about team updates, staff news, achievements, or what the team has been working on.",
+      inputSchema: {
+        department: z.string().optional().describe("Specific department to get updates for (optional)")
+      },
+    },
+    async (args: { department?: string }) => {
+      const deptPart = args.department ? ` in ${args.department}` : "";
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `The PoshCare team${deptPart} has been doing excellent work! Recent achievements include improved patient satisfaction scores and successful implementation of new care protocols.`,
+          },
+        ],
+      };
+    }
+  );
+
+  // Add a resource for context
+  server.registerResource(
+    "poshcare-daily-summary",
+    "poshcare://daily-summary",
+    {
+      name: "PoshCare Daily Summary",
+      description: "Daily operations summary and status for PoshCare",
+      mimeType: "text/plain"
+    },
+    async () => {
+      return {
+        contents: [
+          {
+            uri: "poshcare://daily-summary",
+            text: "PoshCare Daily Operations Summary\n" +
+              "=================================\n" +
+              "Status: All systems operational\n" +
+              "Team performance: Excellent\n" +
+              "Patient satisfaction: High\n" +
+              "Services: Running smoothly\n" +
+              "Last updated: " + new Date().toISOString()
+          }
+        ]
       };
     }
   );
@@ -79,17 +162,13 @@ app.post("/mcp", async (req, res) => {
   let transport: StreamableHTTPServerTransport;
 
   if (sessionId && transports[sessionId]) {
-    // Reuse existing transport for this session
     transport = transports[sessionId];
   } else if (!sessionId && isInitializeRequest(req.body)) {
-    // New initialization request
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
         transports[id] = transport;
       },
-      // NOTE: DNS rebinding protection is off by default. In production,
-      // consider enabling it via enableDnsRebindingProtection and allowedHosts.
     });
 
     transport.onclose = () => {
@@ -98,11 +177,9 @@ app.post("/mcp", async (req, res) => {
       }
     };
 
-    // Create and connect the MCP server instance for this transport
     const server = createMcpServer();
     await server.connect(transport);
   } else {
-    // Invalid request: missing session and not an initialize
     res.status(400).json({
       jsonrpc: "2.0",
       error: {
@@ -114,13 +191,16 @@ app.post("/mcp", async (req, res) => {
     return;
   }
 
-  // Let the transport handle the incoming request
   try {
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error("Transport handleRequest error:", err);
     if (!res.headersSent) {
-      res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "Internal server error" }, id: null });
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error" },
+        id: null
+      });
     }
   }
 });
@@ -150,7 +230,12 @@ app.delete("/mcp", async (req, res) => {
   res.status(200).send("Session closed");
 });
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 app.listen(PORT, () => {
-  console.log(`PoshCare MCP server listening on http://localhost:${PORT}/mcp`);
+  console.log(`Enhanced PoshCare MCP server listening on http://localhost:${PORT}/mcp`);
+  console.log("Available tools:");
+  console.log("- how-was-day: Get daily summary");
+  console.log("- get-poshcare-info: Get general information");
+  console.log("- check-poshcare-status: Check system status");
+  console.log("- get-team-updates: Get team updates");
 });
