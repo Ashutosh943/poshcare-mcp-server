@@ -1,6 +1,7 @@
 import express from "express";
-import { Server } from "@modelcontextprotocol/sdk/server";
+import { Server } from "@modelcontextprotocol/sdk"; // fixed import
 import {
+  CallToolRequest,
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types";
@@ -33,15 +34,18 @@ async function main() {
   }));
 
   // Handle tool execution
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    if (req.params.name === "getLastMonthSale") {
-      const { month } = req.params.arguments as { month: string };
-      return {
-        content: [{ type: "text", text: `Sales for ${month}: 500` }],
-      };
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (req: CallToolRequest) => { // added proper type
+      if (req.params.name === "getLastMonthSale") {
+        const { month } = req.params.arguments as { month: string };
+        return {
+          content: [{ type: "text", text: `Sales for ${month}: 500` }],
+        };
+      }
+      throw new Error(`Unknown tool: ${req.params.name}`);
     }
-    throw new Error(`Unknown tool: ${req.params.name}`);
-  });
+  );
 
   // Express app
   const app = express();
